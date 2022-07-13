@@ -376,34 +376,46 @@ void CMisc::AccurateMovement(CUserCmd* pCmd, CBaseEntity* pLocal)
 		|| pLocal->GetMoveType() == MOVETYPE_OBSERVER)
 	{
 		return;
-	}
-
-	if (pCmd->buttons & (IN_JUMP | IN_MOVELEFT | IN_MOVERIGHT | IN_FORWARD | IN_BACK))
-	{
-		return;
-	}
+	}//
 
 	const float Speed = pLocal->GetVecVelocity().Length2D();
-	const float SpeedLimit = Vars::Debug::DebugBool.Value ? 2.f : 10.f;	//	does some fucky stuff
+	const std::pair<float, float> Speeds = { pLocal->GetPlayerMaxVelocity() * (pCmd->forwardmove < 0 ? .9f : 1.f) * 0.95f, 10.f};
+	const int maxSpeed = pLocal->GetMaxSpeed() * (pCmd->forwardmove < 0 ? .85f : .95f);
 
-
-	if (Speed > SpeedLimit)
-	{
-		switch (Vars::Misc::AccurateMovement.Value) {
-		case 1: {
-			Vec3 direction = pLocal->GetVecVelocity().toAngle();
-			direction.y = pCmd->viewangles.y - direction.y;
-			const Vec3 negatedDirection = direction.fromAngle() * -Speed;
-			pCmd->forwardmove = negatedDirection.x;
-			pCmd->sidemove = negatedDirection.y;
-			break;
-		}
-		case 2: {
-			G::ShouldStop = true;
-			break;
-		}
+	if (pCmd->buttons & (IN_JUMP | IN_MOVELEFT | IN_MOVERIGHT | IN_FORWARD | IN_BACK)) {
+		if (Speed < Speeds.first && Speed < maxSpeed && !G::IsAttacking && Vars::Misc::AccurateMovement.Value) {
+			Vec3 vecMove(pCmd->forwardmove, pCmd->sidemove, 0.0f);
+			float flLength = vecMove.Length();
+			if (flLength > 0.0f)
+			{
+				QAngle angMoveReverse;
+				Math::VectorAngles(vecMove * -1.f, angMoveReverse);
+				pCmd->forwardmove = -flLength;
+				pCmd->sidemove = 0.0f; // Move only backwards, no sidemove
+				pCmd->viewangles.y = fmodf(pCmd->viewangles.y - angMoveReverse.y, 360.0f);
+				pCmd->viewangles.z = 270.0f; // OMFG SUPER 1337 SPEEDHAQ METHODS 8)
+				G::RollExploiting = true;
+				G::ForceChokePacket = true;
+			}
 		}
 	}
+	else if (Speed > Speeds.second)
+		{
+			switch (Vars::Misc::AccurateMovement.Value) {
+			case 1: {
+				Vec3 direction = pLocal->GetVecVelocity().toAngle();
+				direction.y = pCmd->viewangles.y - direction.y;
+				const Vec3 negatedDirection = direction.fromAngle() * -Speed;
+				pCmd->forwardmove = negatedDirection.x;
+				pCmd->sidemove = negatedDirection.y;
+				break;
+			}
+			case 2: {
+				G::ShouldStop = true;
+				break;
+			}
+			}
+		}
 	else
 	{
 		pCmd->forwardmove = 0.0f;
